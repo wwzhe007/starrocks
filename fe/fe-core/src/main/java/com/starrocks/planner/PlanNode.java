@@ -792,4 +792,39 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         }
         return canDoReplicatedJoin;
     }
+
+    public boolean canonicalize(FragmentCanonicalizationVisitor visitor) {
+        StringBuilder sb = new StringBuilder(1024);
+        PlanNodeId id = visitor.planNodeIdGen.getNextId();
+        sb.append()
+        TPlanNode msg = new TPlanNode();
+        msg.node_id = id.asInt();
+        msg.num_children = children.size();
+        msg.limit = limit;
+        msg.setUse_vectorized(true);
+        for (TupleId tid : tupleIds) {
+            msg.addToRow_tuples(tid.asInt());
+            msg.addToNullable_tuples(nullableTupleIds.contains(tid));
+        }
+        for (Expr e : conjuncts) {
+            msg.addToConjuncts(e.treeToThrift());
+        }
+        toThrift(msg);
+        container.addToNodes(msg);
+        if (this instanceof ExchangeNode) {
+            msg.num_children = 0;
+        } else {
+            msg.num_children = children.size();
+            for (PlanNode child : children) {
+                child.treeToThriftHelper(container);
+            }
+        }
+        if (!probeRuntimeFilters.isEmpty()) {
+            msg.setProbe_runtime_filters(
+                    RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(probeRuntimeFilters));
+        }
+        msg.setLocal_rf_waiting_set(getLocalRfWaitingSet());
+        msg.setNeed_create_tuple_columns(false);
+        return false;
+    }
 }

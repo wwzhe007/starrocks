@@ -33,6 +33,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TreeNode;
 import com.starrocks.common.io.Writable;
+import com.starrocks.planner.FragmentCanonicalizationVisitor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AST2SQL;
@@ -1515,5 +1516,9 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         scalarOperator = scalarRewriter.rewrite(scalarOperator, ScalarOperatorRewriter.CAST_AND_FOLD_RULES);
         return ScalarOperatorToExpr.buildExprIgnoreSlot(scalarOperator,
                 new ScalarOperatorToExpr.FormatterContext(Maps.newHashMap()));
+    }
+
+    public boolean canonicalize(FragmentCanonicalizationVisitor visitor) {
+        return false;
     }
 }

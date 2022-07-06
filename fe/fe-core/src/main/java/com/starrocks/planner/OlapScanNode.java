@@ -675,4 +675,9 @@ public class OlapScanNode extends ScanNode {
     public long getSelectedIndexId() {
         return selectedIndexId;
     }
+
+    @Override
+    public boolean canonicalize(FragmentCanonicalizationVisitor visitor) {
+        return super.canonicalize(visitor);
+    }
 }
