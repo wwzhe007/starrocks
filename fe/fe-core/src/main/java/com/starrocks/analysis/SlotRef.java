@@ -29,13 +29,18 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
+import com.starrocks.planner.FragmentCanonicalizationVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TSlotRef;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TException;
+import org.apache.thrift.TSerializer;
+import org.apache.thrift.protocol.TCompactProtocol;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -241,6 +246,25 @@ public class SlotRef extends Expr {
             msg.slot_ref = new TSlotRef(0,0);
         }
 
+        msg.setOutput_column(outputColumn);
+    }
+
+    @Override
+    public void toCanonicalForm(TExprNode msg, FragmentCanonicalizationVisitor visitor) {
+        msg.node_type = TExprNodeType.SLOT_REF;
+        if (desc != null) {
+            SlotId newSlotId = visitor.remapSlotId(desc.getId());
+            if (desc.getParent() != null) {
+                TupleId newTupleId = visitor.remapTupleId(desc.getParent().getId());
+                msg.slot_ref = new TSlotRef(newSlotId.asInt(), newTupleId.asInt());
+            } else {
+                // tuple id is meaningless here
+                msg.slot_ref = new TSlotRef(newSlotId.asInt(), 0);
+            }
+        } else {
+            // slot id and tuple id are meaningless here
+            msg.slot_ref = new TSlotRef(0, 0);
+        }
         msg.setOutput_column(outputColumn);
     }
 

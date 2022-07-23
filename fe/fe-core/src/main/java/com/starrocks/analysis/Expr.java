@@ -48,6 +48,7 @@ import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprOpcode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TException;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -58,6 +59,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * Root of the expr node hierarchy.
@@ -708,15 +710,29 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return toSql();
     }
 
+
     // Convert this expr, including all children, to its Thrift representation.
     public TExpr treeToThrift() {
         TExpr result = new TExpr();
-        treeToThriftHelper(result);
+        treeToThriftHelper(result, Expr::toThrift);
         return result;
     }
 
+    public void toCanonicalForm(TExprNode tExprNode, FragmentCanonicalizationVisitor visitor) {
+        this.toThrift(tExprNode);
+    }
+
+    public TExpr canonicalize(FragmentCanonicalizationVisitor visitor) {
+        TExpr result = new TExpr();
+        treeToThriftHelper(result, (expr, texprNode) -> expr.toCanonicalForm(texprNode, visitor));
+        return treeToThrift();
+    }
+
+    public interface ExprVisitor {
+        void visit(Expr expr, TExprNode texprNode);
+    }
     // Append a flattened version of this expr, including all children, to 'container'.
-    protected void treeToThriftHelper(TExpr container) {
+    final void treeToThriftHelper(TExpr container, ExprVisitor visitor) {
         TExprNode msg = new TExprNode();
 
         if (type.isNull()) {
@@ -724,7 +740,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             // being cast to a non-NULL type, the type doesn't matter and we can cast it
             // arbitrarily.
             NullLiteral l = NullLiteral.create(ScalarType.BOOLEAN);
-            l.treeToThriftHelper(container);
+            l.treeToThriftHelper(container, visitor);
             return;
         }
 
@@ -740,12 +756,11 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         }
         msg.output_scale = getOutputScale();
         msg.setIs_monotonic(isMonotonic());
-        toThrift(msg);
+        visitor.visit(this, msg);
         container.addToNodes(msg);
         for (Expr child : children) {
-            child.treeToThriftHelper(container);
+            child.treeToThriftHelper(container, visitor);
         }
-
     }
 
     // Convert this expr into msg (excluding children), which requires setting
@@ -1518,7 +1533,4 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
                 new ScalarOperatorToExpr.FormatterContext(Maps.newHashMap()));
     }
 
-    public boolean canonicalize(FragmentCanonicalizationVisitor visitor) {
-        return false;
-    }
 }

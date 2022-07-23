@@ -101,6 +101,8 @@ public:
     // Push chunk to this operator
     virtual Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) = 0;
 
+    virtual Status reset_state(std::vector<ChunkPtr> chunks) { return Status::OK(); }
+
     int32_t get_id() const { return _id; }
 
     int32_t get_plan_node_id() const { return _plan_node_id; }

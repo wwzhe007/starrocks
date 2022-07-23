@@ -140,6 +140,7 @@ public:
     const DelPredicateArray& delete_predicates() const { return _tablet_meta->delete_predicates(); }
     void add_delete_predicate(const DeletePredicatePB& delete_predicate, int64_t version);
     bool version_for_delete_predicate(const Version& version);
+    bool has_delete_predicates(const Version& version);
 
     // message for alter task
     AlterTabletTaskSharedPtr alter_task();
