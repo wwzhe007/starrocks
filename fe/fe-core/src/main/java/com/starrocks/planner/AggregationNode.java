@@ -24,12 +24,16 @@ package com.starrocks.planner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.AggregateInfo;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TupleId;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TAggregationNode;
 import com.starrocks.thrift.TExplainLevel;
@@ -42,8 +46,11 @@ import com.starrocks.thrift.TStreamingPreaggregationMode;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class AggregationNode extends PlanNode {
     private final AggregateInfo aggInfo;
@@ -281,11 +288,29 @@ public class AggregationNode extends PlanNode {
     @Override
     protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizationVisitor visitor) {
         TNormalAggregationNode aggrNode = new TNormalAggregationNode();
-        List<ByteBuffer> groupingExprs = visitor.normalizeExprs(aggInfo.getPartitionExprs());
-        aggrNode.setGrouping_exprs(groupingExprs);
-        List<Expr> aggrFunctionCallExprs = new ArrayList<>(aggInfo.getMaterializedAggregateExprs());
-        List<ByteBuffer> aggrFunctions = visitor.normalizeExprs(aggrFunctionCallExprs);
-        aggrNode.setAggregate_functions(aggrFunctions);
+        TupleId tupleId = needsFinalize? aggInfo.getOutputTupleId():aggInfo.getIntermediateTupleId();
+        List<SlotId> slotIds = visitor.execPlan.getDescTbl().getTupleDesc(tupleId).getSlots()
+                .stream().map(SlotDescriptor::getId).collect(Collectors.toList());
+
+        List<Expr> groupingExprs = aggInfo.getGroupingExprs();
+        Map<SlotId, Expr> slotIdsAndGroupingExprs = Maps.newHashMap();
+        int numGroupingExprs = (groupingExprs == null || groupingExprs.isEmpty()) ? 0 : groupingExprs.size();
+
+        IntStream.range(0, numGroupingExprs).forEach(i ->
+                slotIdsAndGroupingExprs.put(slotIds.get(i), groupingExprs.get(i)));
+        Pair<List<Integer>, List<ByteBuffer>> remappedGroupExprs =
+                visitor.normalizeSlotIdsAndExprs(slotIdsAndGroupingExprs);
+        aggrNode.setGrouping_exprs(remappedGroupExprs.second);
+
+        Map<SlotId, Expr> slotIdsAndAggExprs = Maps.newHashMap();
+        List<FunctionCallExpr> aggExprs = aggInfo.getMaterializedAggregateExprs();
+        int numAggExprs = (aggExprs == null || aggExprs.isEmpty()) ? 0 : aggExprs.size();
+        IntStream.range(0, numAggExprs).forEach(i ->
+                slotIdsAndAggExprs.put(slotIds.get(i + numGroupingExprs), aggExprs.get(i)));
+        Pair<List<Integer>, List<ByteBuffer>> remappedAggExprs =
+                visitor.normalizeSlotIdsAndExprs(slotIdsAndAggExprs);
+        aggrNode.setAggregate_functions(remappedAggExprs.second);
+
         aggrNode.setIntermediate_tuple_id(visitor.remapTupleId(aggInfo.getIntermediateTupleId()).asInt());
         aggrNode.setOutput_tuple_id(visitor.remapTupleId(aggInfo.getOutputTupleId()).asInt());
         aggrNode.setNeed_finalize(needsFinalize);

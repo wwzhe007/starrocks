@@ -807,18 +807,19 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         planNode.setLimit(this.getLimit());
         planNode.setRow_tuples(visitor.remapTupleIds(tupleIds));
 
+        List<Boolean> nullable_tuples = tupleIds.stream().map(id -> this.nullableTupleIds.contains(id))
+                .collect(Collectors.toList());
+        planNode.setNullable_tuples(nullable_tuples);
+        toNormalForm(planNode, visitor);
+        // NOTICE toNormalForm must be called before applying remapSlotIds to TupleDescriptor and
+        // applying normalizeExpr to conjuncts.
         final DescriptorTable descriptorTable = visitor.execPlan.getDescTbl();
         List<SlotId> slotIds = tupleIds.stream().map(descriptorTable::getTupleDesc)
                 .flatMap(tupleDesc -> tupleDesc.getSlots().stream().map(SlotDescriptor::getId))
                 .collect(Collectors.toList());
-
         visitor.remapSlotIds(slotIds);
-
-        List<Boolean> nullable_tuples = tupleIds.stream().map(id -> this.nullableTupleIds.contains(id))
-                .collect(Collectors.toList());
-        planNode.setNullable_tuples(nullable_tuples);
         planNode.setConjuncts(visitor.normalizeExprs(this.conjuncts));
-        toNormalForm(planNode, visitor);
+
         return planNode;
     }
 }
