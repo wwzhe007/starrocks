@@ -4,6 +4,7 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -168,5 +169,10 @@ public class ProjectNode extends PlanNode {
         projectNode.setExprs(slotIdAndExprs.second);
         planNode.setNode_type(TPlanNodeType.PROJECT_NODE);
         planNode.setProject_node(projectNode);
+    }
+
+    @Override
+    public List<SlotId> getOutputSlotIds(DescriptorTable descriptorTable) {
+        return slotMap.keySet().stream().sorted(Comparator.comparing(SlotId::asInt)).collect(Collectors.toList());
     }
 }

@@ -21,12 +21,14 @@
 
 package com.starrocks.planner;
 
+import com.fasterxml.jackson.module.scala.deser.TupleDeserializer;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AggregateInfo;
 import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotDescriptor;
@@ -326,5 +328,16 @@ public class AggregationNode extends PlanNode {
         aggrNode.setAgg_func_set_version(3);
         planNode.setNode_type(TPlanNodeType.AGGREGATION_NODE);
         planNode.setAgg_node(aggrNode);
+    }
+
+    @Override
+    public List<SlotId> getOutputSlotIds(DescriptorTable descriptorTable) {
+        final List<Expr> groupingExprs = aggInfo.getGroupingExprs();
+        final List<FunctionCallExpr> aggExprs = aggInfo.getMaterializedAggregateExprs();
+        int numGroupingExprs = groupingExprs != null ? groupingExprs.size() : 0;
+        int numAggExprs = aggExprs != null ? aggExprs.size() : 0;
+        TupleId tupleId = needsFinalize ? aggInfo.getOutputTupleId() : aggInfo.getIntermediateTupleId();
+        return descriptorTable.getTupleDesc(tupleId).getSlots().subList(0, numGroupingExprs + numAggExprs)
+                .stream().map(SlotDescriptor::getId).collect(Collectors.toList());
     }
 }

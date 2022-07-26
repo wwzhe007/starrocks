@@ -822,4 +822,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
         return planNode;
     }
+
+    public List<SlotId> getOutputSlotIds(DescriptorTable descriptorTable) {
+        return descriptorTable.getTupleDesc(getTupleIds().get(0)).getSlots()
+                .stream().map(SlotDescriptor::getId).collect(Collectors.toList());
+    }
 }
