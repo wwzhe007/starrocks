@@ -8,17 +8,22 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.common.Id;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TNormalPlanNode;
+import com.starrocks.thrift.TNormalProjectNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TProjectNode;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class ProjectNode extends PlanNode {
     private final Map<SlotId, Expr> slotMap;
@@ -149,5 +154,19 @@ public class ProjectNode extends PlanNode {
             }
         }
         return false;
+    }
+
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizationVisitor visitor) {
+        TNormalProjectNode projectNode = new TNormalProjectNode();
+        Pair<List<Integer>, List<ByteBuffer>> cseSlotIdsAndExprs = visitor.normalizeSlotIdsAndExprs(commonSlotMap);
+        projectNode.setCse_slot_ids(cseSlotIdsAndExprs.first);
+        projectNode.setCse_exprs(cseSlotIdsAndExprs.second);
+
+        Pair<List<Integer>, List<ByteBuffer>> slotIdAndExprs = visitor.normalizeSlotIdsAndExprs(slotMap);
+        projectNode.setSlot_ids(slotIdAndExprs.first);
+        projectNode.setExprs(slotIdAndExprs.second);
+        planNode.setNode_type(TPlanNodeType.PROJECT_NODE);
+        planNode.setProject_node(projectNode);
     }
 }

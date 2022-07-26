@@ -5,7 +5,7 @@ package com.starrocks.analysis;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.planner.FragmentCanonicalizationVisitor;
+import com.starrocks.planner.FragmentNormalizationVisitor;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -49,7 +49,7 @@ public class PlaceHolderExpr extends Expr {
     }
 
     @Override
-    public void toCanonicalForm(TExprNode msg, FragmentCanonicalizationVisitor visitor) {
+    public void toNormalForm(TExprNode msg, FragmentNormalizationVisitor visitor) {
         msg.setNode_type(TExprNodeType.PLACEHOLDER_EXPR);
         msg.setVslot_ref(new TPlaceHolder());
         msg.vslot_ref.setNullable(nullable);

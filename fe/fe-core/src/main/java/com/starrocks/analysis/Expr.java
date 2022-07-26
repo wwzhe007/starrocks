@@ -33,7 +33,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TreeNode;
 import com.starrocks.common.io.Writable;
-import com.starrocks.planner.FragmentCanonicalizationVisitor;
+import com.starrocks.planner.FragmentNormalizationVisitor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AST2SQL;
@@ -718,13 +718,13 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return result;
     }
 
-    public void toCanonicalForm(TExprNode tExprNode, FragmentCanonicalizationVisitor visitor) {
+    public void toNormalForm(TExprNode tExprNode, FragmentNormalizationVisitor visitor) {
         this.toThrift(tExprNode);
     }
 
-    public TExpr canonicalize(FragmentCanonicalizationVisitor visitor) {
+    public TExpr normalize(FragmentNormalizationVisitor visitor) {
         TExpr result = new TExpr();
-        treeToThriftHelper(result, (expr, texprNode) -> expr.toCanonicalForm(texprNode, visitor));
+        treeToThriftHelper(result, (expr, texprNode) -> expr.toNormalForm(texprNode, visitor));
         return treeToThrift();
     }
 

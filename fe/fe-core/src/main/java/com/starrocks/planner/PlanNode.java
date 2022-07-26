@@ -27,8 +27,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.math.LongMath;
 import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
+import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
@@ -38,7 +40,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import com.starrocks.thrift.TCanonicalPlanNode;
+import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlan;
 import com.starrocks.thrift.TPlanNode;
@@ -498,7 +500,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return result;
     }
 
-    protected void toCanonicalForm(TCanonicalPlanNode planNode, FragmentCanonicalizationVisitor visitor){
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizationVisitor visitor){
     }
 
     // Append a flattened version of this plan node, including all children, to 'container'.
@@ -798,17 +800,25 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return canDoReplicatedJoin;
     }
 
-    public TCanonicalPlanNode canonicalize(FragmentCanonicalizationVisitor visitor) {
-        TCanonicalPlanNode planNode = new TCanonicalPlanNode();
+    public TNormalPlanNode normalize(FragmentNormalizationVisitor visitor) {
+        TNormalPlanNode planNode = new TNormalPlanNode();
         planNode.setNode_id(visitor.remapPlanNodeId(this.id).asInt());
         planNode.setNum_children(this.getChildren().size());
         planNode.setLimit(this.getLimit());
         planNode.setRow_tuples(visitor.remapTupleIds(tupleIds));
+
+        final DescriptorTable descriptorTable = visitor.execPlan.getDescTbl();
+        List<SlotId> slotIds = tupleIds.stream().map(descriptorTable::getTupleDesc)
+                .flatMap(tupleDesc -> tupleDesc.getSlots().stream().map(SlotDescriptor::getId))
+                .collect(Collectors.toList());
+
+        visitor.remapSlotIds(slotIds);
+
         List<Boolean> nullable_tuples = tupleIds.stream().map(id -> this.nullableTupleIds.contains(id))
                 .collect(Collectors.toList());
         planNode.setNullable_tuples(nullable_tuples);
-        planNode.setConjuncts(visitor.canonicalizeExprs(this.conjuncts));
-        toCanonicalForm(planNode, visitor);
+        planNode.setConjuncts(visitor.normalizeExprs(this.conjuncts));
+        toNormalForm(planNode, visitor);
         return planNode;
     }
 }

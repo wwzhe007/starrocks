@@ -61,6 +61,8 @@ import com.starrocks.system.Backend;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TNormalOlapScanNode;
+import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TOlapScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -74,6 +76,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -84,6 +87,13 @@ public class OlapScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(OlapScanNode.class);
 
     private final List<TScanRangeLocations> result = new ArrayList<>();
+    private final HashSet<Long> scanBackendIds = new HashSet<>();
+    // The column names applied dict optimization
+    // used for explain
+    private final List<String> appliedDictStringColumns = new ArrayList<>();
+    private final List<String> unUsedOutputStringColumns = new ArrayList<>();
+    // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.
+    public ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations = ArrayListMultimap.create();
     /*
      * When the field value is ON, the storage engine can return the data directly without pre-aggregation.
      * When the field value is OFF, the storage engine needs to aggregate the data before returning to scan node.
@@ -110,21 +120,33 @@ public class OlapScanNode extends ScanNode {
     private int selectedPartitionNum = 0;
     private Collection<Long> selectedPartitionIds = Lists.newArrayList();
     private long actualRows = 0;
-
     // List of tablets will be scanned by current olap_scan_node
     private ArrayList<Long> scanTabletIds = Lists.newArrayList();
     private boolean isFinalized = false;
-
-    private final HashSet<Long> scanBackendIds = new HashSet<>();
-
     private Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
-    // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.
-    public ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations = ArrayListMultimap.create();
+    // The dict id int column ids to dict string column ids
+    private Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
 
     // Constructs node to scan given data files of table 'tbl'.
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         olapTable = (OlapTable) desc.getTable();
+    }
+
+    // export some tablets
+    public static OlapScanNode createOlapScanNodeByLocation(
+            PlanNodeId id, TupleDescriptor desc, String planNodeName, List<TScanRangeLocations> locationsList) {
+        OlapScanNode olapScanNode = new OlapScanNode(id, desc, planNodeName);
+        olapScanNode.numInstances = 1;
+        olapScanNode.selectedIndexId = olapScanNode.olapTable.getBaseIndexId();
+        olapScanNode.selectedPartitionNum = 1;
+        olapScanNode.selectedTabletsNum = 1;
+        olapScanNode.totalTabletsNum = 1;
+        olapScanNode.isPreAggregation = false;
+        olapScanNode.isFinalized = true;
+        olapScanNode.result.addAll(locationsList);
+
+        return olapScanNode;
     }
 
     public void setIsPreAggregation(boolean isPreAggregation, String reason) {
@@ -147,16 +169,9 @@ public class OlapScanNode extends ScanNode {
         return selectedPartitionIds;
     }
 
-    // The dict id int column ids to dict string column ids
-    private Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
-
     public void setDictStringIdToIntIds(Map<Integer, Integer> dictStringIdToIntIds) {
         this.dictStringIdToIntIds = dictStringIdToIntIds;
     }
-
-    // The column names applied dict optimization
-    // used for explain
-    private final List<String> appliedDictStringColumns = new ArrayList<>();
 
     public void updateAppliedDictStringColumns(Set<Integer> appliedColumnIds) {
         for (SlotDescriptor slot : desc.getSlots()) {
@@ -165,8 +180,6 @@ public class OlapScanNode extends ScanNode {
             }
         }
     }
-
-    private final List<String> unUsedOutputStringColumns = new ArrayList<>();
 
     public void setUnUsedOutputStringColumns(Set<Integer> unUsedOutputColumnIds, Set<String> aggTableValueColumnNames) {
         for (SlotDescriptor slot : desc.getSlots()) {
@@ -563,9 +576,9 @@ public class OlapScanNode extends ScanNode {
         }
 
         output.append(prefix).append(String.format(
-                        "partitionsRatio=%s/%s",
-                        selectedPartitionNum,
-                        olapTable.getPartitions().size())).append(", ")
+                "partitionsRatio=%s/%s",
+                selectedPartitionNum,
+                olapTable.getPartitions().size())).append(", ")
                 .append(String.format("tabletsRatio=%s/%s", selectedTabletsNum, totalTabletsNum)).append("\n");
 
         if (scanTabletIds.size() > 10) {
@@ -577,9 +590,9 @@ public class OlapScanNode extends ScanNode {
         output.append("\n");
 
         output.append(prefix).append(String.format(
-                        "actualRows=%s", actualRows))
+                "actualRows=%s", actualRows))
                 .append(", ").append(String.format(
-                        "avgRowSize=%s", avgRowSize)).append("\n");
+                "avgRowSize=%s", avgRowSize)).append("\n");
         return output.toString();
     }
 
@@ -622,22 +635,6 @@ public class OlapScanNode extends ScanNode {
         }
     }
 
-    // export some tablets
-    public static OlapScanNode createOlapScanNodeByLocation(
-            PlanNodeId id, TupleDescriptor desc, String planNodeName, List<TScanRangeLocations> locationsList) {
-        OlapScanNode olapScanNode = new OlapScanNode(id, desc, planNodeName);
-        olapScanNode.numInstances = 1;
-        olapScanNode.selectedIndexId = olapScanNode.olapTable.getBaseIndexId();
-        olapScanNode.selectedPartitionNum = 1;
-        olapScanNode.selectedTabletsNum = 1;
-        olapScanNode.totalTabletsNum = 1;
-        olapScanNode.isPreAggregation = false;
-        olapScanNode.isFinalized = true;
-        olapScanNode.result.addAll(locationsList);
-
-        return olapScanNode;
-    }
-
     @Override
     public boolean canUsePipeLine() {
         return true;
@@ -676,8 +673,33 @@ public class OlapScanNode extends ScanNode {
         return selectedIndexId;
     }
 
-    @Override
-    public boolean canonicalize(FragmentCanonicalizationVisitor visitor) {
-        return super.canonicalize(visitor);
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizationVisitor visitor) {
+        TNormalOlapScanNode scanNode = new TNormalOlapScanNode();
+        List<String> keyColumnNames = new ArrayList<String>();
+        List<TPrimitiveType> keyColumnTypes = new ArrayList<TPrimitiveType>();
+        if (selectedIndexId != -1) {
+            for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
+                if (!col.isKey()) {
+                    break;
+                }
+                keyColumnNames.add(col.getName());
+                keyColumnTypes.add(col.getPrimitiveType().toThrift());
+            }
+        }
+        scanNode.setKey_column_name(keyColumnNames);
+        scanNode.setKey_column_type(keyColumnTypes);
+        scanNode.setIs_preaggregation(isPreAggregation);
+        scanNode.setSort_column(sortColumn);
+        scanNode.setRollup_name(olapTable.getIndexNameById(selectedIndexId));
+
+        List<Integer> dictStringIds = dictStringIdToIntIds.keySet().stream().sorted(Integer::compareTo).collect(Collectors.toList());
+        List<Integer> dictIntIds = dictStringIds.stream().map(dictStringIdToIntIds::get).collect(Collectors.toList());
+        scanNode.setDict_string_ids(dictStringIds);
+        scanNode.setDict_int_ids(dictIntIds);
+        if (!olapTable.hasDelete()) {
+            scanNode.setUnused_output_column_name(unUsedOutputStringColumns);
+        }
+        planNode.setNode_type(TPlanNodeType.OLAP_SCAN_NODE);
+        planNode.setOlap_scan_node(scanNode);
     }
 }

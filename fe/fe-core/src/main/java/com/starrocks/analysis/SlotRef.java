@@ -29,7 +29,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
-import com.starrocks.planner.FragmentCanonicalizationVisitor;
+import com.starrocks.planner.FragmentNormalizationVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExpr;
@@ -250,7 +250,7 @@ public class SlotRef extends Expr {
     }
 
     @Override
-    public void toCanonicalForm(TExprNode msg, FragmentCanonicalizationVisitor visitor) {
+    public void toNormalForm(TExprNode msg, FragmentNormalizationVisitor visitor) {
         msg.node_type = TExprNodeType.SLOT_REF;
         if (desc != null) {
             SlotId newSlotId = visitor.remapSlotId(desc.getId());

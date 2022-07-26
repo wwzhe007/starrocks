@@ -34,11 +34,16 @@ import com.starrocks.common.UserException;
 import com.starrocks.thrift.TAggregationNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
+import com.starrocks.thrift.TNormalAggregationNode;
+import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TStreamingPreaggregationMode;
 
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class AggregationNode extends PlanNode {
     private final AggregateInfo aggInfo;
@@ -271,5 +276,30 @@ public class AggregationNode extends PlanNode {
     @Override
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
+    }
+
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizationVisitor visitor) {
+        TNormalAggregationNode aggrNode = new TNormalAggregationNode();
+        List<ByteBuffer> groupingExprs = visitor.normalizeExprs(aggInfo.getPartitionExprs());
+        aggrNode.setGrouping_exprs(groupingExprs);
+        List<Expr> aggrFunctionCallExprs = new ArrayList<>(aggInfo.getMaterializedAggregateExprs());
+        List<ByteBuffer> aggrFunctions = visitor.normalizeExprs(aggrFunctionCallExprs);
+        aggrNode.setAggregate_functions(aggrFunctions);
+        aggrNode.setIntermediate_tuple_id(visitor.remapTupleId(aggInfo.getIntermediateTupleId()).asInt());
+        aggrNode.setOutput_tuple_id(visitor.remapTupleId(aggInfo.getOutputTupleId()).asInt());
+        aggrNode.setNeed_finalize(needsFinalize);
+        aggrNode.setUse_streaming_preaggregation(useStreamingPreagg);
+        aggrNode.setHas_outer_join_child(hasNullableGenerateChild);
+        if (streamingPreaggregationMode.equalsIgnoreCase("force_streaming")) {
+            aggrNode.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.FORCE_STREAMING);
+        } else if (streamingPreaggregationMode.equalsIgnoreCase("force_preaggregation")) {
+            aggrNode.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.FORCE_PREAGGREGATION);
+        } else {
+            aggrNode.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.AUTO);
+        }
+        aggrNode.setAgg_func_set_version(3);
+        planNode.setNode_type(TPlanNodeType.AGGREGATION_NODE);
+        planNode.setAgg_node(aggrNode);
     }
 }
