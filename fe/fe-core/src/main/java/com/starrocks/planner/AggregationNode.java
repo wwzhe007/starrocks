@@ -328,6 +328,7 @@ public class AggregationNode extends PlanNode {
         aggrNode.setAgg_func_set_version(3);
         planNode.setNode_type(TPlanNodeType.AGGREGATION_NODE);
         planNode.setAgg_node(aggrNode);
+        normalizeConjuncts(visitor, planNode, conjuncts);
     }
 
     @Override

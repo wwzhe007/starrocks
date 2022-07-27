@@ -90,5 +90,6 @@ public class DecodeNode extends PlanNode {
         decodeNode.setString_functions(slotIdsAndExprs.second);
         planNode.setNode_type(TPlanNodeType.DECODE_NODE);
         planNode.setDecode_node(decodeNode);
+        normalizeConjuncts(visitor, planNode, conjuncts);
     }
 }

@@ -308,6 +308,7 @@ public class OlapScanNode extends ScanNode {
             internalRange.setVersion(visibleVersionStr);
             internalRange.setVersion_hash("0");
             internalRange.setTablet_id(tabletId);
+            internalRange.setPartition_id(partition.getId());
 
             // random shuffle List && only collect one copy
             List<Replica> allQueryableReplicas = Lists.newArrayList();
@@ -701,5 +702,7 @@ public class OlapScanNode extends ScanNode {
         }
         planNode.setNode_type(TPlanNodeType.OLAP_SCAN_NODE);
         planNode.setOlap_scan_node(scanNode);
+
+        normalizeConjuncts(visitor, planNode, conjuncts);
     }
 }

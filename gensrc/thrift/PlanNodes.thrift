@@ -103,7 +103,8 @@ struct TInternalScanRange {
   6: required string db_name
   7: optional list<TKeyRange> partition_column_ranges
   8: optional string index_name
-  9: optional string table_name
+  9: optional string table_name 
+  10: optional i64 partition_id
 }
 
 enum TFileFormatType {

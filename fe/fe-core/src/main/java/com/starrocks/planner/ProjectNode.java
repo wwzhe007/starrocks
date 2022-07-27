@@ -169,6 +169,7 @@ public class ProjectNode extends PlanNode {
         projectNode.setExprs(slotIdAndExprs.second);
         planNode.setNode_type(TPlanNodeType.PROJECT_NODE);
         planNode.setProject_node(projectNode);
+        normalizeConjuncts(visitor, planNode, conjuncts);
     }
 
     @Override

@@ -800,6 +800,15 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return canDoReplicatedJoin;
     }
 
+    public void normalizeConjuncts(FragmentNormalizationVisitor visitor, TNormalPlanNode planNode, List<Expr> conjuncts) {
+        final DescriptorTable descriptorTable = visitor.execPlan.getDescTbl();
+        List<SlotId> slotIds = tupleIds.stream().map(descriptorTable::getTupleDesc)
+                .flatMap(tupleDesc -> tupleDesc.getSlots().stream().map(SlotDescriptor::getId))
+                .collect(Collectors.toList());
+        visitor.remapSlotIds(slotIds);
+        planNode.setConjuncts(visitor.normalizeExprs(conjuncts));
+    }
+
     public TNormalPlanNode normalize(FragmentNormalizationVisitor visitor) {
         TNormalPlanNode planNode = new TNormalPlanNode();
         planNode.setNode_id(visitor.remapPlanNodeId(this.id).asInt());
@@ -811,14 +820,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
                 .collect(Collectors.toList());
         planNode.setNullable_tuples(nullable_tuples);
         toNormalForm(planNode, visitor);
-        // NOTICE toNormalForm must be called before applying remapSlotIds to TupleDescriptor and
-        // applying normalizeExpr to conjuncts.
-        final DescriptorTable descriptorTable = visitor.execPlan.getDescTbl();
-        List<SlotId> slotIds = tupleIds.stream().map(descriptorTable::getTupleDesc)
-                .flatMap(tupleDesc -> tupleDesc.getSlots().stream().map(SlotDescriptor::getId))
-                .collect(Collectors.toList());
-        visitor.remapSlotIds(slotIds);
-        planNode.setConjuncts(visitor.normalizeExprs(this.conjuncts));
 
         return planNode;
     }
